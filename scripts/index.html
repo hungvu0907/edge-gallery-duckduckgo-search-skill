@@ -52,7 +52,7 @@
         return { query: query, results: resultsText.trim() };
       }
 
-      window["ai_edge_gallery_get_result"] = async (data) => {
+      const ai_edge_gallery_get_result = async (data) => {
         try {
           const jsonData = JSON.parse(data);
           if (!jsonData.query) return JSON.stringify({ error: "No search query provided." });
@@ -64,6 +64,8 @@
           return JSON.stringify({ error: `Failed to query DuckDuckGo: ${e.message}` });
         }
       };
+      window["ai_edge_gallery_get_result"] = ai_edge_gallery_get_result
+      globalThis["ai_edge_gallery_get_result"] = ai_edge_gallery_get_result
     </script>
   </body>
 </html>
