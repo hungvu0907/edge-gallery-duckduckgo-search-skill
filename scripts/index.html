@@ -12,7 +12,8 @@
        * @param {string} query - The search query.
        */
       async function searchDuckDuckGo(query) {
-        const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+        const targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+        const url = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
         
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
