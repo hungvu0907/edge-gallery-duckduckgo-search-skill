@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Query DuckDuckGo</title>
+  </head>
+  <body>
+    <script>
+      /**
+       * Fetches and parses search results from DuckDuckGo's HTML Lite version.
+       * @param {string} query - The search query.
+       */
+      async function searchDuckDuckGo(query) {
+        const targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+        const proxies = [
+          (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+          (url) => `https://corsproxy.io/?${encodeURIComponent(url)}` // Keeping as fallback although currently failing
+        ];
+
+        let html = "";
+        let lastError = null;
+
+        for (const proxyFn of proxies) {
+          const url = proxyFn(targetUrl);
+          try {
+            // Try up to 2 times per proxy for transient errors
+            for (let attempt = 1; attempt <= 2; attempt++) {
+              const res = await fetch(url);
+              if (res.ok) {
+                html = await res.text();
+                break;
+              }
+              if (res.status === 403 || res.status === 429) {
+                // Definitely blocked or throttled, try next proxy immediately
+                throw new Error(`Proxy returned ${res.status}`);
+              }
+            }
+            if (html) break;
+          } catch (e) {
+            lastError = e;
+            continue;
+          }
+        }
+
+        if (!html) {
+          throw new Error(`Failed to fetch search results after trying multiple proxies. Last error: ${lastError?.message || 'Unknown'}`);
+        }
+        
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        
+        let resultsText = "";
+        const results = doc.querySelectorAll('.result');
+        
+        // Limit to top 5 results to save context window space
+        const maxResults = Math.min(results.length, 5);
+        
+        for (let i = 0; i < maxResults; i++) {
+          const node = results[i];
+          const titleNode = node.querySelector('.result__title .result__a');
+          const snippetNode = node.querySelector('.result__snippet');
+          
+          if (titleNode && snippetNode) {
+            const title = titleNode.textContent.trim();
+            const link = titleNode.getAttribute('href');
+            // Extract actual URL if DDG wraps it in a redirect
+            const decodedLink = link.startsWith('//duckduckgo.com/l/?uddg=') 
+              ? decodeURIComponent(link.split('uddg=')[1].split('&')[0]) 
+              : link;
+            const snippet = snippetNode.textContent.trim();
+            
+            resultsText += `Result ${i + 1}:\nTitle: ${title}\nURL: ${decodedLink}\nSummary: ${snippet}\n\n`;
+          }
+        }
+        
+        if (!resultsText.trim()) {
+          return { error: `No web results found for '${query}'.` };
+        }
+        
+        return { query: query, results: resultsText.trim() };
+      }
+
+      const ai_edge_gallery_get_result = async (data) => {
+        try {
+          const jsonData = JSON.parse(data);
+          if (!jsonData.query) return JSON.stringify({ error: "No search query provided." });
+          
+          const searchResponse = await searchDuckDuckGo(jsonData.query);
+          return JSON.stringify(searchResponse);
+        } catch (e) {
+          console.error(e);
+          return JSON.stringify({ error: `Failed to query DuckDuckGo: ${e.message}` });
+        }
+      };
+      window["ai_edge_gallery_get_result"] = ai_edge_gallery_get_result
+      globalThis["ai_edge_gallery_get_result"] = ai_edge_gallery_get_result
+    </script>
+  </body>
+</html>
